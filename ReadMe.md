@@ -31,6 +31,7 @@ It is designed to be strict when detecting licenses - please let me know if you 
 The utility makes some GitHub and GitLab API calls. For those you'll need to set up a Personal Access Token for each provider and set an environment variable to each one.
 
 `GITHUB_PAT=github_pat_11BF*************D5xsl_gkQeLZidP2t*****************RM2NVZ****gfl`
+
 `GITLAB_PAT=glpat-pkD8J**********EV9WJfGM**********TpvdjFheA8.01.170****lv`
  
 ## Looking up the license from a Repo
