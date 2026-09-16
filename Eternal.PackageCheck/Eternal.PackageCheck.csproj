@@ -1,0 +1,61 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <VersionPrefix>1.0.12</VersionPrefix>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Description>A utility that reports the metadata for Npm, NuGet, Go, Python, and RubyGems packages from their associated registries. It then scrapes the repo for the license link and copyright message.</Description>
+    <Copyright>Copyright Eternal Developments, LLC. All Rights Reserved.</Copyright>
+    <PackageProjectUrl>https://eternaldevelopments.com/packagedocs/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/JohnJScott/Packages</RepositoryUrl>
+    <PackageReadmeFile>ReadMe.md</PackageReadmeFile>
+    <RepositoryType>Git</RepositoryType>
+    <PackageTags>js; ruby; go; nuget; python</PackageTags>
+    <NeutralLanguage>en</NeutralLanguage>
+    <Company>Eternal Developments, LLC.</Company>
+    <Authors>JohnJScott</Authors>
+    <Title>A utility to check the meta data of packages.</Title>
+    <PackAsTool>True</PackAsTool>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <WarningLevel>9999</WarningLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <WarningLevel>9999</WarningLevel>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GenerateSbom>true</GenerateSbom>	
+  </PropertyGroup>
+
+	<ItemGroup>
+	  <InternalsVisibleTo Include="Eternal.PackageCheckTest" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Eternal.ConsoleUtilities" Version="1.0.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="ReadMe.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+	<None Update="LicenseBoilerPlate.json">
+	  <Pack>True</Pack>
+	  <PackagePath>tools\net10.0\any\</PackagePath>
+	</None> 
+	<None Update="LicensePriorities.json">
+	  <Pack>True</Pack>
+	  <PackagePath>tools\net10.0\any\</PackagePath>
+	</None> 	
+  </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+	<Exec Command="copy &quot;$(ProjectDir)LicensePriorities.json&quot; &quot;$(OutputPath)&quot;&#xD;&#xA;copy &quot;$(ProjectDir)LicenseBoilerPlate.json&quot; &quot;$(OutputPath)&quot;" />
+  </Target>
+
+</Project>

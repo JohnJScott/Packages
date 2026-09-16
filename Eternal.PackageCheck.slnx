@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Eternal.PackageCheck/Eternal.PackageCheck.csproj" />
+  <Project Path="Eternal.PackageCheckTest/Eternal.PackageCheckTest.csproj" Id="55d95f9b-db9b-4d7e-b2e3-b2d7ace84952" />
+  <Properties Name="PerforceSourceControlProviderSolutionProperties">
+    <Property Name="SolutionIsControlled" Value="True" />
+  </Properties>
+</Solution>

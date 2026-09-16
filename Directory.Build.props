@@ -1,0 +1,9 @@
+<Project>
+ <PropertyGroup>
+   <Deterministic>true</Deterministic>
+   <BaseOutputPath>$(SolutionDir)\Binaries\$(Platform)\</BaseOutputPath>
+   <BaseIntermediateOutputPath>$(SolutionDir)\Intermediate\$(Platform)\</BaseIntermediateOutputPath> 
+   <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath> 
+   <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>  
+  </PropertyGroup>
+</Project>

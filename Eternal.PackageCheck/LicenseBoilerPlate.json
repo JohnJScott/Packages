@@ -1,0 +1,272 @@
+{
+	"MIT": {
+		"SpdxCode": "MIT",
+		"LicenseVersion": "",
+		"DefaultUrl": "https://spdx.org/licenses/MIT.html",
+		"StartLicenseText": "Permission is hereby granted, free of charge, to any person",
+		"EndLicenseText": "SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+		"Identifiers": [
+			"sell copies of the Software, and to permit persons to whom the Software",
+			"INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY",
+			"shall be included in all copies or substantial portions of the Software",
+			"TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE"
+		]
+	},
+	"MIT-0": {
+		"SpdxCode": "MIT-0",
+		"LicenseVersion": "",
+		"DefaultUrl": "https://spdx.org/licenses/MIT-0.html",
+		"StartLicenseText": "Permission is hereby granted, free of charge, to any person",
+		"EndLicenseText": "SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+		"Identifiers": [
+			"sell copies of the Software, and to permit persons to whom the Software",
+			"INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY",
+			"TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE"
+		]
+	},
+	"ISC": {
+		"SpdxCode": "ISC",
+		"LicenseVersion": "",
+		"DefaultUrl": "https://spdx.org/licenses/ISC.html",
+		"StartLicenseText": "Permission to use, copy, modify, and",
+		"EndLicenseText": "CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.",
+		"Identifiers": [
+			"software for any purpose with or without fee is hereby granted",
+			"DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING",
+			"NEGLIGENCE OR OTHER TORTIOUS ACTION"
+		]
+	},
+	"BSD-3-Clause": {
+		"SpdxCode": "BSD-3-Clause",
+		"LicenseVersion": "",
+		"DefaultUrl": "https://spdx.org/licenses/BSD-3-Clause.html",
+		"StartLicenseText": "Redistribution and use in source and binary forms, with or without",
+		"EndLicenseText": "EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.",
+		"Identifiers": [
+			"of source code must retain the above copyright notice",
+			"in binary form must reproduce the above copyright notice",
+			"to endorse or promote products derived from this",
+			"BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES",
+			"HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY"
+		]
+	},
+	"BSD-2-Clause": {
+		"SpdxCode": "BSD-2-Clause",
+		"LicenseVersion": "",
+		"DefaultUrl": "https://spdx.org/licenses/BSD-2-Clause.html",
+		"StartLicenseText": "Redistribution and use in source and binary forms, with or without",
+		"EndLicenseText": "EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.",
+		"Identifiers": [
+			"of source code must retain the above copyright notice",
+			"in binary form must reproduce the above copyright notice",
+			"BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES",
+			"HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY"
+		]
+	},
+	"0BSD": {
+		"SpdxCode": "0BSD",
+		"LicenseVersion": "",
+		"DefaultUrl": "https://spdx.org/licenses/0BSD.html",
+		"StartLicenseText": "Permission to use, copy, modify, and/or distribute this software for any purpose",
+		"EndLicenseText": "CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.",
+		"Identifiers": [
+			"SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY",
+			"DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT"
+		]
+	},
+	"Apache-2.0": {
+		"SpdxCode": "Apache-2.0",
+		"LicenseVersion": "2.0",
+		"DefaultUrl": "https://spdx.org/licenses/Apache-2.0.html",
+		"StartLicenseText": "Apache License Version 2.0, January 2004",
+		"EndLicenseText": "governing permissions and limitations under the License.",
+		"Identifiers": [
+			"Legal Entity exercising permissions granted by this License",
+			"Work or a Contribution incorporated within the Work constitutes direct or contributory",
+			"NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE",
+			"http://www.apache.org/licenses/LICENSE-2.0"
+		]
+	},
+	"BlueOak-1.0.0": {
+		"SpdxCode": "BlueOak-1.0.0",
+		"LicenseVersion": "1.0.0",
+		"DefaultUrl": "https://spdx.org/licenses/BlueOak-1.0.0.html",
+		"StartLicenseText": "# Blue Oak Model License",
+		"EndLicenseText": "under any kind of legal claim.***",
+		"Identifiers": [
+			"Legal Entity exercising permissions granted by this License",
+			"ensure that everyone who gets a copy of any part of this software from you",
+			"license are both obligations under that agreement",
+			"https://blueoakcouncil.org/license/1.0.0"
+		]
+	},
+	"PSF-2.0": {
+		"SpdxCode": "PSF-2.0",
+		"LicenseVersion": "2.0",
+		"DefaultUrl": "https://spdx.org/licenses/PSF-2.0.html",
+		"StartLicenseText": "1. This LICENSE AGREEMENT is between the",
+		"EndLicenseText": "Licensee agrees to be bound by the terms and conditions of this License Agreement.",
+		"Identifiers": [
+			"Licensee a nonexclusive, royalty-free, world-wide license",
+			"Licensee prepares a derivative work that is based on or incorporates",
+			"ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES"
+		]
+	},
+	"MPL-2.0": {
+		"SpdxCode": "MPL-2.0",
+		"LicenseVersion": "2.0",
+		"DefaultUrl": "https://spdx.org/licenses/MPL-2.0.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+			"If a copy of the MPL was not distributed with this",
+			"https://mozilla.org/MPL/2.0/"
+		]
+	},
+	"CC0-1.0": {
+		"SpdxCode": "CC0-1.0",
+		"LicenseVersion": "1.0",
+		"DefaultUrl": "https://spdx.org/licenses/CC0-1.0.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"WTFPL": {
+		"SpdxCode": "WTFPL",
+		"LicenseVersion": "",
+		"DefaultUrl": "https://spdx.org/licenses/WTFPL.html",
+		"StartLicenseText": "Everyone is permitted to copy and distribute verbatim",
+		"EndLicenseText": "K YOU WANT TO.",
+		"Identifiers": [
+			"changing it is allowed as long as the name is changed"
+		]
+	},
+	"Ruby": {
+		"SpdxCode": "Ruby",
+		"LicenseVersion": "",
+		"DefaultUrl": "https://spdx.org/licenses/Ruby.html",
+		"StartLicenseText": "Ruby is copyrighted free software by Yukihiro Matsumoto",
+		"EndLicenseText": "MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.",
+		"Identifiers": [
+			"provided that you do at least ONE of the following",
+			"on where to get the original distribution.",
+			"But some files in the distribution are not written by the author"
+		]
+	},
+	"CC-BY-4.0": {
+		"SpdxCode": "CC-BY-4.0",
+		"LicenseVersion": "4.0",
+		"DefaultUrl": "https://spdx.org/licenses/CC-BY-4.0.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+			"legal processes of any jurisdiction or authority.",
+			"reproduce and Share the Licensed Material",
+			"bound by any additional or different terms",
+			"may be interpreted as a limitation upon, or waiver of, any privileges"
+		]
+	},
+	"Hippocratic-2.1": {
+		"SpdxCode": "Hippocratic-2.1",
+		"LicenseVersion": "2.1",
+		"DefaultUrl": "https://spdx.org/licenses/Hippocratic-2.1.html",
+		"StartLicenseText": "Hippocratic License Version Number: 2.1.",
+		"EndLicenseText": "to the maximum extent permitted by Laws.",
+		"Identifiers": [
+			"Licensee must ensure that everyone who gets a copy of any part",
+			"Human Rights Principles and Human Rights Laws",
+			"court modification pursuant to the immediately"
+		]
+	},
+	"LGPL-2.0-only": {
+		"SpdxCode": "LGPL-2.0-only",
+		"LicenseVersion": "2.0",
+		"DefaultUrl": "https://spdx.org/licenses/LGPL-2.0-only.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"LGPL-2.0-or-later": {
+		"SpdxCode": "LGPL-2.0-or-later",
+		"LicenseVersion": "2.0+",
+		"DefaultUrl": "https://spdx.org/licenses/LGPL-2.0-or-later.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"LGPL-2.1-only": {
+		"SpdxCode": "LGPL-2.1-only",
+		"LicenseVersion": "2.1",
+		"DefaultUrl": "https://spdx.org/licenses/LGPL-2.1-only.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"LGPL-2.1-or-later": {
+		"SpdxCode": "LGPL-2.1-or-later",
+		"LicenseVersion": "2.1+",
+		"DefaultUrl": "https://spdx.org/licenses/LGPL-2.1-or-later.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"LGPL-3.0-only": {
+		"SpdxCode": "LGPL-3.0-only",
+		"LicenseVersion": "3.0",
+		"DefaultUrl": "https://spdx.org/licenses/LGPL-3.0-only.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"LGPL-3.0-or-later": {
+		"SpdxCode": "LGPL-3.0-or-later",
+		"LicenseVersion": "3.0+",
+		"DefaultUrl": "https://spdx.org/licenses/LGPL-3.0-or-later.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"GPL-2.0-only": {
+		"SpdxCode": "GPL-2.0-only",
+		"LicenseVersion": "2.0-only",
+		"DefaultUrl": "https://spdx.org/licenses/GPL-2.0-only.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"GPL-2.0-or-later": {
+		"SpdxCode": "GPL-2.0-or-later",
+		"LicenseVersion": "2.0+",
+		"DefaultUrl": "https://spdx.org/licenses/GPL-2.0-or-later.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"GPL-3.0-only": {
+		"SpdxCode": "GPL-3.0-only",
+		"LicenseVersion": "3.0",
+		"DefaultUrl": "https://spdx.org/licenses/GPL-3.0-only.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"GPL-3.0-or-later": {
+		"SpdxCode": "GPL-3.0-or-later",
+		"LicenseVersion": "3.0+",
+		"DefaultUrl": "https://spdx.org/licenses/GPL-3.0-or-later.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	}
+}

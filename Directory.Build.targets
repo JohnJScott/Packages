@@ -1,0 +1,61 @@
+<Project>
+
+  <!--
+    CycloneDX SBOM generation, shared by every packable project in this repo.
+
+    - Opt in per-project with <GenerateSbom>true</GenerateSbom> in that
+      project's own .csproj (see Eternal.ConsoleUtilities.csproj and
+      Eternal.PerforceUtilities.csproj for the two current examples).
+    - Assumes the project's solution file sits next to this file and is
+      named "$(MSBuildProjectName).sln" - true for most projects here. When
+      that doesn't hold (e.g. a managed project inside a mixed native/managed
+      solution named differently - see Eternal.LZMA2SimpleCS.csproj), set
+      <SbomSolutionPath> explicitly in that project; CycloneDX accepts a
+      .sln OR a single .csproj path here.
+    - Runs once per opted-in project on a Release build.
+    - Uses $(MSBuildThisFileDirectory) to locate the solution, so it works from
+      Visual Studio, `dotnet build`, and CI alike (does NOT rely on $(SolutionDir)).
+    - The CycloneDX tool is version-pinned in .config/dotnet-tools.json.
+    - Output: Binaries\SBOM\<ProjectName>.sbom.json (under the ignored Binaries dir).
+
+    Toggle off for a build with:  -p:SbomEnabled=false
+    Override the spec version with: -p:SbomSpecVersion=1.6
+  -->
+
+  <PropertyGroup Condition="'$(GenerateSbom)' == 'true'">
+    <SbomEnabled Condition="'$(SbomEnabled)' == ''">true</SbomEnabled>
+    <SbomSpecVersion Condition="'$(SbomSpecVersion)' == ''">1.5</SbomSpecVersion>
+    <SbomSolutionPath Condition="'$(SbomSolutionPath)' == ''">$(MSBuildThisFileDirectory)$(MSBuildProjectName).slnx</SbomSolutionPath>
+    <!-- No trailing slash: a trailing backslash inside the quoted output path escapes the closing quote on Windows. -->
+    <SbomOutputDir>$(MSBuildThisFileDirectory)Binaries\SBOM</SbomOutputDir>
+    <SbomFileName Condition="'$(SbomFileName)' == ''">$(MSBuildProjectName).sbom.json</SbomFileName>
+  </PropertyGroup>
+
+  <Target Name="GenerateCycloneDxSbom"
+          BeforeTargets="Build"
+          Condition="'$(GenerateSbom)' == 'true' And '$(SbomEnabled)' == 'true' And '$(Configuration)' == 'Release'">
+
+    <Message Importance="high" Text="[SBOM] Generating CycloneDX $(SbomSpecVersion) SBOM for $(SbomSolutionPath)" />
+
+    <!-- Ensure the pinned CycloneDX tool is available. -->
+    <Exec Command="dotnet tool restore"
+          WorkingDirectory="$(MSBuildThisFileDirectory)" />
+
+    <!-- Generate one SBOM for the whole solution (test projects excluded). -->
+    <Exec Command="dotnet CycloneDX &quot;$(SbomSolutionPath)&quot; --output &quot;$(SbomOutputDir)&quot; --filename &quot;$(SbomFileName)&quot; --output-format Json --spec-version $(SbomSpecVersion) --exclude-test-projects --set-name &quot;$(MSBuildProjectName)&quot; --set-version &quot;$(Version)&quot; --configuration $(Configuration)"
+          WorkingDirectory="$(MSBuildThisFileDirectory)" />
+
+    <Message Importance="high" Text="[SBOM] Wrote $(SbomOutputDir)\$(SbomFileName)" />
+  </Target>
+
+  <!--
+    Embed the generated SBOM inside the NuGet package under sbom/.
+    Declared here (not in the .csproj) so $(SbomFileName)/$(SbomOutputDir) are in scope.
+    The target above runs BeforeTargets="Build"; pack runs after Build
+    (GeneratePackageOnBuild), so the file exists when pack collects it.
+  -->
+  <ItemGroup Condition="'$(GenerateSbom)' == 'true' And '$(SbomEnabled)' == 'true' And '$(Configuration)' == 'Release'">
+    <None Include="$(SbomOutputDir)\$(SbomFileName)" Pack="true" PackagePath="sbom/" Visible="false" />
+  </ItemGroup>
+
+</Project>
