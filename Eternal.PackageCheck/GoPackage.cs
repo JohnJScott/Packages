@@ -2,7 +2,6 @@
 
 using Eternal.ConsoleUtilities;
 using System.Text;
-using YamlDotNet.Core;
 
 namespace Eternal.PackageCheck
 {
@@ -107,6 +106,18 @@ namespace Eternal.PackageCheck
 	internal class GoPackage
 		: GenericPackage
 	{
+		/// <summary>
+		/// The canonical name of this package type. Lower cased it is the command line verb, and upper cased it is the deps.dev system name, so neither is stored
+		/// separately. It is also the display name and the ecosystem component of the .tps file name.
+		/// </summary>
+		internal const string PackageType = "Go";
+
+		/// <summary>The ecosystem name used by OSV, from https://ossf.github.io/osv-schema/#defined-ecosystems. OSV rejects anything else with an HTTP 400.</summary>
+		internal const string OSVEcosystem = "Go";
+
+		/// <summary>The path segment used by security.snyk.io, which calls Go "golang".</summary>
+		internal const string SnykEcosystem = "golang";
+
 		private void AddLicense( LicenseInfo licenseInfo )
 		{
 			Licenses.Add( licenseInfo );
@@ -171,7 +182,17 @@ namespace Eternal.PackageCheck
 				HomepageUri = $"https://pkg.go.dev/{Name}@{Version}";
 			}
 
-			base.CleanupData( "Go" );
+			base.CleanupData( PackageType, OSVEcosystem, SnykEcosystem );
+		}
+
+		/// <summary>
+		/// Records where a reviewer can see this package's own dependencies, which deps.dev lists for every supported ecosystem.
+		/// </summary>
+		/// <param name="packageType">The package type's canonical name, lower cased to form the deps.dev URL.</param>
+		protected override void SetDependencyUri( string packageType )
+		{
+			// e.g. https://deps.dev/nuget/newtonsoft.json/13.0.4/requirements
+			DependencyUri = $"https://deps.dev/{packageType.ToLowerInvariant()}/{Uri.EscapeDataString( Name )}/{Uri.EscapeDataString( Version )}/requirements";
 		}
 
 		private void AddDependencies( List<GoDependency> goDependencies, EDependencyType dependencyType )
@@ -201,11 +222,53 @@ namespace Eternal.PackageCheck
 		}
 
 		/// <summary>
+		/// Picks the version of a module to use from its published versions. Go modules are always referenced by an exact version - go.mod has no range syntax - so this is
+		/// close to a passthrough: a blank requirement takes the default (latest stable) version, and anything else must match a published version exactly.
+		/// </summary>
+		/// <param name="packageName">The module path, used for logging.</param>
+		/// <param name="versions">The published versions of the module.</param>
+		/// <param name="requirement">Blank for the default version, or an exact version such as "v1.8.0"; the leading "v" is optional.</param>
+		/// <returns>The version number to use, or null if no version could be found.</returns>
+		private static string? SelectVersion( string packageName, List<GoPackageVersionSummary> versions, string requirement )
+		{
+			string trimmed_requirement = requirement.Trim();
+
+			if( trimmed_requirement.Length == 0 )
+			{
+				GoPackageVersionSummary? default_version = versions.FirstOrDefault( x => x.isDefault );
+				if( default_version == null )
+				{
+					ConsoleLogger.Warning( $"No default version found for the '{packageName}' Go package; falling back to last." );
+					default_version = versions.LastOrDefault();
+				}
+
+				if( default_version == null )
+				{
+					ConsoleLogger.Error( $"No published versions found for the '{packageName}' Go package on deps.dev" );
+					return null;
+				}
+
+				return default_version.versionKey.version;
+			}
+
+			// go.mod records exact versions rather than ranges, so the requirement only needs normalizing before an equality match
+			GoPackageVersionSummary? exact_version = versions.FirstOrDefault( x => x.versionKey.version == NormalizedVersion( trimmed_requirement ) );
+			if( exact_version == null )
+			{
+				ConsoleLogger.Error( $"Version {trimmed_requirement} not found for the '{packageName}' Go package on deps.dev" );
+				return null;
+			}
+
+			return exact_version.versionKey.version;
+		}
+
+		/// <summary>
 		/// Looks up a Go module's metadata from deps.dev: resolves the requested version (or the default/latest one if <paramref name="version"/> is empty), fetches its
 		/// licenses and links, and - for GitHub/GitLab-hosted source - the project's description via the deps.dev projects endpoint.
 		/// </summary>
 		/// <param name="packageName">The module path, e.g. "golang.org/x/sys".</param>
 		/// <param name="version">The specific version to fetch, or "" to use the default/latest version.</param>
+		/// <param name="isRootPackage">True if this is the package being checked, rather than one of its dependencies, so its dependencies are collected.</param>
 		/// <returns>The populated package, or null if the module, version, or its details could not be retrieved.</returns>
 		internal static GoPackage? GetGoPackage( string packageName, string version, bool isRootPackage )
 		{
@@ -225,33 +288,13 @@ namespace Eternal.PackageCheck
 				return null;
 			}
 
-			GoPackageVersionSummary? requested_version;
-			if( string.IsNullOrEmpty( version ) )
+			string? selected_version = SelectVersion( packageName, metadata.versions, version );
+			if( selected_version == null )
 			{
-				requested_version = metadata.versions.FirstOrDefault( x => x.isDefault );
-				if( requested_version == null )
-				{
-					ConsoleLogger.Warning( $"No default version found for the '{packageName}' Go package; falling back to last." );
-					requested_version = metadata.versions.LastOrDefault();
-				}
-
-				if( requested_version == null )
-				{
-					ConsoleLogger.Error( $"No published versions found for the '{packageName}' Go package on deps.dev" );
-					return null;
-				}
-			}
-			else
-			{
-				requested_version = metadata.versions.FirstOrDefault( x => x.versionKey.version == NormalizedVersion( version ) );
-				if( requested_version == null )
-				{
-					ConsoleLogger.Error( $"Version {version} not found for the '{packageName}' Go package on deps.dev" );
-					return null;
-				}
+				return null;
 			}
 
-			string version_request = $"{package_request}/versions/{Uri.EscapeDataString( requested_version.versionKey.version )}";
+			string version_request = $"{package_request}/versions/{Uri.EscapeDataString( selected_version )}";
 			string version_content = PackageCheck.Request( version_request ).Result;
 			if( string.IsNullOrEmpty( version_content ) )
 			{
@@ -328,7 +371,7 @@ namespace Eternal.PackageCheck
 			if( isRootPackage )
 			{
 				// Add in any dependencies
-				string dependencies_request = $"{package_request}/versions/{Uri.EscapeDataString( requested_version.versionKey.version )}:requirements";
+				string dependencies_request = $"{package_request}/versions/{Uri.EscapeDataString( selected_version )}:requirements";
 				go_package.AddAllDependencies( dependencies_request );
 			}
 
@@ -338,15 +381,12 @@ namespace Eternal.PackageCheck
 		protected override void UpdateDependency( PackageDependency dependency )
 		{
 			GoPackage? go_package = GetGoPackage( dependency.Name, "", false );
-			if( go_package == null )
+			if( go_package != null )
 			{
-				return;
+				go_package.SetDownloadUri();
+				go_package.CleanupDependencyData();
+				go_package.SetDependencyLicense( dependency );
 			}
-
-			go_package.SetDownloadUri();
-			go_package.CleanupDependencyData( "Go" );
-
-			base.UpdateDependency( dependency );
 		}
 
 		/// <summary>
@@ -358,14 +398,11 @@ namespace Eternal.PackageCheck
 		public static void CheckGoPackage( string packageName, string version )
 		{
 			GoPackage? go_package = GetGoPackage( packageName, version, true );
-			if( go_package == null )
+			if( go_package != null )
 			{
-				return;
+				go_package.CleanupData();
+				go_package.PrintDetails( PackageType );
 			}
-
-			go_package.CleanupData();
-
-			go_package.PrintDetails( "Go" );
 		}
 	}
 }

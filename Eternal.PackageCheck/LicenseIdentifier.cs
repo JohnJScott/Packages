@@ -70,19 +70,23 @@ namespace Eternal.PackageCheck
 		/// </summary>
 		/// <param name="licenses">The candidate licenses (by SPDX code) to try matching against.</param>
 		/// <param name="htmlUrl">The human-viewable URL of the license file, recorded on a match.</param>
-		/// <param name="downloadUrl">The raw download URL of the license file (currently unused, reserved for future use).</param>
 		/// <param name="licenseContent">The license file's raw text content.</param>
-		/// <returns>true if the content matched one of the candidate licenses' boilerplate; otherwise false.</returns>
-		public static bool IdentifyLicense( List<LicenseInfo> licenses, string htmlUrl, string licenseContent )
+		public static void IdentifyLicense( List<LicenseInfo> licenses, string htmlUrl, string licenseContent )
 		{
 			if( LicenseBoilerPlate == null )
 			{
-				return false;
+				return;
 			}
 
 			string clean_license_content = PackageCheck.SanitizeString( licenseContent );
 			foreach( LicenseInfo license_info in licenses )
 			{
+				// Don't reset the license content if it's already set
+				if( !string.IsNullOrEmpty( license_info.LicenseContent ) )
+				{
+					continue;
+				}
+
 				// Get the metadata for the license
 				if( LicenseBoilerPlate.TryGetValue( license_info.SpdxCode, out LicenseDetails? license_details ) )
 				{
@@ -122,12 +126,14 @@ namespace Eternal.PackageCheck
 						license_info.HtmlLicenseUri = htmlUrl;
 						license_info.LicenseContent = licenseContent;
 						ConsoleLogger.Log( $"Found start text, end text, and identifying text -> using '{htmlUrl}'" );
+						break;
 					}
 					else if( !has_start_end_text && identifiers_match )
 					{
 						license_info.HtmlLicenseUri = htmlUrl;
 						license_info.LicenseContent = licenseContent;
 						ConsoleLogger.Log( $"Found identifying text, and there is no start or end text to find -> using '{htmlUrl}'" );
+						break;
 					}
 				}
 				else
@@ -135,8 +141,6 @@ namespace Eternal.PackageCheck
 					ConsoleLogger.Warning( $"Missing license metadata for '{license_info.SpdxCode}'" );
 				}
 			}
-
-			return false;
 		}
 
 		/// <summary>
@@ -149,11 +153,6 @@ namespace Eternal.PackageCheck
 		public static void ScrapeCopyrightFromLicenses( List<LicenseInfo> licenses, ref string copyright )
 		{
 			if( LicenseBoilerPlate == null )
-			{
-				return;
-			}
-
-			if( !string.IsNullOrEmpty( copyright ) )
 			{
 				return;
 			}
@@ -200,9 +199,20 @@ namespace Eternal.PackageCheck
 					continue;
 				}
 
-				string copyright_message = license_content.Substring( copyright_index, start_license - copyright_index );
-				copyright = PackageCheck.SanitizeString( copyright_message );
-				ConsoleLogger.Log( $" .. found copyright message in license -> using '{copyright}'" );
+				// Only reset the copyright message if it isn't set by the metadata
+				if( string.IsNullOrEmpty( copyright ) )
+				{
+					string copyright_message = license_content.Substring( copyright_index, start_license - copyright_index );
+					copyright = PackageCheck.SanitizeString( copyright_message );
+					ConsoleLogger.Log( $" .. found copyright message in license -> using '{copyright}'" );
+				}
+
+				// Remove anything before the start of the license
+				start_license = license_info.LicenseContent.IndexOf( license_details.StartLicenseText, StringComparison.OrdinalIgnoreCase );
+				if( start_license > -1 )
+				{
+					license_info.LicenseContent = license_info.LicenseContent.Remove( 0, start_license );
+				}
 			}
 		}
 	}

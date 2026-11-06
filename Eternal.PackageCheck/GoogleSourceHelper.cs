@@ -1,4 +1,4 @@
-// Copyright Eternal Developments, LLC. All Rights Reserved.
+﻿// Copyright Eternal Developments, LLC. All Rights Reserved.
 
 using Eternal.ConsoleUtilities;
 using System.Text;
@@ -63,25 +63,18 @@ namespace Eternal.PackageCheck
 		/// <returns>A seekable, position-0 stream containing the zip archive, or null if the download failed.</returns>
 		public static async Task<MemoryStream?> GetPackageZipAsync( string name, string version )
 		{
-			MemoryStream? zip_stream = null;
-			try
-			{
-				string fixed_name = CanonizeString( name );
-				string zip_request = $"https://proxy.golang.org/{fixed_name}/@v/{version}.zip";
+			string fixed_name = CanonizeString( name );
+			string zip_request = $"https://proxy.golang.org/{fixed_name}/@v/{version}.zip";
 
-				HttpResponseMessage response = await HttpClientInstance.GetAsync( zip_request );
-				response.EnsureSuccessStatusCode();
-
-				zip_stream = new MemoryStream();
-				await response.Content.CopyToAsync( zip_stream );
-				zip_stream.Position = 0;
-			}
-			catch( HttpRequestException ex )
+			using HttpResponseMessage? response = await PackageCheck.RequestResponse( HttpClientInstance, zip_request );
+			if( response == null )
 			{
-				ConsoleLogger.Error( $"GoogleSource query failed with message '{ex.Message}'" );
-				zip_stream = null;
+				return null;
 			}
 
+			MemoryStream zip_stream = new MemoryStream();
+			await response.Content.CopyToAsync( zip_stream );
+			zip_stream.Position = 0;
 			return zip_stream;
 		}
 	}

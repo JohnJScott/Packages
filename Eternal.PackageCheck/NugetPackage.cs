@@ -1,4 +1,4 @@
-// Copyright Eternal Developments, LLC. All Rights Reserved.
+﻿// Copyright Eternal Developments, LLC. All Rights Reserved.
 
 using Eternal.ConsoleUtilities;
 using System.Text.Json;
@@ -124,6 +124,18 @@ namespace Eternal.PackageCheck
 	internal class NuGetPackage
 		: GenericPackage
 	{
+		/// <summary>
+		/// The canonical name of this package type. Lower cased it is the command line verb, and upper cased it is the deps.dev system name, so neither is stored
+		/// separately. It is also the display name and the ecosystem component of the .tps file name.
+		/// </summary>
+		internal const string PackageType = "NuGet";
+
+		/// <summary>The ecosystem name used by OSV, from https://ossf.github.io/osv-schema/#defined-ecosystems. OSV rejects anything else with an HTTP 400.</summary>
+		internal const string OSVEcosystem = "NuGet";
+
+		/// <summary>The path segment used by security.snyk.io, which names several ecosystems differently to OSV.</summary>
+		internal const string SnykEcosystem = "nuget";
+
 		private void AddLicense( LicenseInfo licenseInfo )
 		{
 			Licenses.Add( licenseInfo );
@@ -137,9 +149,12 @@ namespace Eternal.PackageCheck
 		{
 			foreach( NuGetPackageDependencyGroup dependency_group in dependencyGroups )
 			{
-				if( !Enum.TryParse( dependency_group.targetFramework.Replace( ".", "" ), out EDependencyType dependency_type ) )
+				string target_framework = dependency_group.targetFramework.Replace( ".", "" );
+				target_framework = target_framework.Replace( "-", "" );
+				if( !Enum.TryParse( target_framework, out EDependencyType dependency_type ) )
 				{
 					dependency_type = EDependencyType.Unknown;
+					ConsoleLogger.Warning( $"Unknown dependency group '{dependency_group.targetFramework}'" );
 				}
 
 				foreach( NuGetPackageDependency dependency in dependency_group.dependencies )
@@ -166,17 +181,62 @@ namespace Eternal.PackageCheck
 		/// </summary>
 		internal void CleanupData()
 		{
-			base.CleanupData( "NuGet" );
+			base.CleanupData( PackageType, OSVEcosystem, SnykEcosystem );
 		}
 
 		/// <summary>
-		/// Looks up a NuGet package's metadata from nuget.org: finds the requested version (or the latest stable one if <paramref name="version"/> is empty, skipping
-		/// prerelease versions), then follows the registration leaf's catalog entry link to read its authors, license, project URL, repository URL, and download URL.
+		/// Picks the version of a package to use from its published versions.
+		/// </summary>
+		/// <param name="packageName">The NuGet package id, used for logging.</param>
+		/// <param name="versions">The published versions of the package, oldest first.</param>
+		/// <param name="requirements">Blank for the latest version, a published version number, or a NuGet version range such as "[1.6.0, 4.0.0)".</param>
+		/// <returns>The version number to use, or null if no version could be found.</returns>
+		private static string? SelectVersion( string packageName, List<string> versions, string requirements )
+		{
+			string trimmed_requirements = requirements.Trim();
+
+			if( trimmed_requirements.Length == 0 )
+			{
+				// The flat container list is not filtered to stable releases, and prerelease versions can be published after the latest stable one -
+				// skip anything containing '-' (the semver prerelease marker) rather than trusting the last array entry.
+				string? latest_version = versions.LastOrDefault( x => !x.Contains( '-' ) );
+				if( latest_version == null )
+				{
+					ConsoleLogger.Warning( $"No stable version found for the '{packageName}' NuGet package; falling back to latest prerelease" );
+					latest_version = versions.LastOrDefault();
+					if( latest_version == null )
+					{
+						ConsoleLogger.Error( $"No valid versions found." );
+						return null;
+					}
+				}
+
+				return latest_version;
+			}
+
+			// A published version number is used as is, which also allows a prerelease to be requested by name
+			string? exact_version = versions.Find( x => x == trimmed_requirements );
+			if( exact_version != null )
+			{
+				return exact_version;
+			}
+
+			NuGetVersion? matching_version = NuGetVersionMatcher.SelectMatchingVersion( packageName, versions, trimmed_requirements );
+			return matching_version?.ToString();
+		}
+
+		/// <summary>
+		/// Looks up a NuGet package's metadata from nuget.org: resolves the version to use from <paramref name="requirements"/>, then follows the registration
+		/// leaf's catalog entry link to read its authors, license, project URL, repository URL, and download URL.
 		/// </summary>
 		/// <param name="packageName">The NuGet package id, e.g. "Newtonsoft.Json".</param>
-		/// <param name="version">The specific version to fetch, or "" to use the latest stable version.</param>
-		/// <returns>The populated package, or null if the package, version, or catalog entry could not be retrieved.</returns>
-		internal static NuGetPackage? GetNuGetPackage( string packageName, string version, bool isRootPackage )
+		/// <param name="requirements">
+		/// Blank to use the latest non-prerelease version; a specific version number such as "13.0.4" (a prerelease can be requested this way); or a NuGet
+		/// version range such as "[8.0.1, )" or "[2.0.1, 3.0.0)", which selects the highest non-prerelease version that satisfies it.
+		/// </param>
+		/// <param name="isRootPackage">True if this is the package being checked, rather than one of its dependencies, so its dependencies are collected.</param>
+		/// <returns>The populated package, or null if the package, its versions, a version satisfying the requirements, or that version's metadata could not be retrieved.</returns>
+		internal static NuGetPackage? GetNuGetPackage( string packageName, string requirements, bool isRootPackage )
 		{
 			// NuGet's v3 API requires the package id lowercased in every URL segment.
 			string versions_request = $"https://api.nuget.org/v3-flatcontainer/{packageName.ToLowerInvariant()}/index.json";
@@ -194,26 +254,10 @@ namespace Eternal.PackageCheck
 				return null;
 			}
 
-			string? requested_version;
-			if( string.IsNullOrEmpty( version ) )
+			string? requested_version = SelectVersion( packageName, versions.versions, requirements );
+			if( requested_version == null )
 			{
-				// The flat container list is not filtered to stable releases, and prerelease versions can be published after the latest stable one -
-				// skip anything containing '-' (the semver prerelease marker) rather than trusting the last array entry.
-				requested_version = versions.versions.LastOrDefault( v => !v.Contains( '-' ) );
-				if( requested_version == null )
-				{
-					ConsoleLogger.Warning( $"No stable version found for the '{packageName}' NuGet package; falling back to latest prerelease" );
-					requested_version = versions.versions[^1];
-				}
-			}
-			else
-			{
-				requested_version = versions.versions.Find( v => ( v == version ) );
-				if( requested_version == null )
-				{
-					ConsoleLogger.Error( $"Version '{version}' not found for the '{packageName}' NuGet package." );
-					return null;
-				}
+				return null;
 			}
 
 			string leaf_request = $"https://api.nuget.org/v3/registration5-semver1/{packageName.ToLowerInvariant()}/{requested_version.ToLowerInvariant()}.json";
@@ -284,15 +328,12 @@ namespace Eternal.PackageCheck
 
 		protected override void UpdateDependency( PackageDependency dependency )
 		{
-			NuGetPackage? nuget_package = GetNuGetPackage( dependency.Name, "", false );
-			if( nuget_package == null )
+			NuGetPackage? nuget_package = GetNuGetPackage( dependency.Name, dependency.Version, false );
+			if( nuget_package != null )
 			{
-				return;
+				nuget_package.CleanupDependencyData();
+				nuget_package.SetDependencyLicense( dependency );
 			}
-
-			nuget_package.CleanupDependencyData( "NuGet" );
-
-			base.UpdateDependency( dependency );
 		}
 
 		/// <summary>
@@ -300,18 +341,15 @@ namespace Eternal.PackageCheck
 		/// package or the requested version could not be found.
 		/// </summary>
 		/// <param name="packageName">The NuGet package id, e.g. "Newtonsoft.Json".</param>
-		/// <param name="version">The specific version to check, or "" to use the latest stable version.</param>
+		/// <param name="version">The specific version to check, a NuGet version range such as "[8.0.1, )", or "" to use the latest stable version.</param>
 		public static void CheckNuGetPackage( string packageName, string version )
 		{
 			NuGetPackage? nuget_package = GetNuGetPackage( packageName, version, true );
-			if( nuget_package == null )
+			if( nuget_package != null )
 			{
-				return;
+				nuget_package.CleanupData();
+				nuget_package.PrintDetails( PackageType );
 			}
-
-			nuget_package.CleanupData();
-
-			nuget_package.PrintDetails( "NuGet" );
 		}
 	}
 }

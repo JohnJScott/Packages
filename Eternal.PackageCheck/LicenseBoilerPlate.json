@@ -112,6 +112,19 @@
 			"ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES"
 		]
 	},
+	"Ms-PL": {
+		"SpdxCode": "Ms-PL",
+		"LicenseVersion": "",
+		"DefaultUrl": "https://spdx.org/licenses/MS-PL.html",
+		"StartLicenseText": "This license governs use of the accompanying software. If you use",
+		"EndLicenseText": "merchantability, fitness for a particular purpose and non-infringement.",
+		"Identifiers": [
+			"Copyright Grant- Subject to the terms of this license",
+			"No Trademark License",
+			"patent claims that read directly on its contribution.",
+			"The contributors give no express warranties, guarantees, or conditions."
+		]
+	},
 	"MPL-2.0": {
 		"SpdxCode": "MPL-2.0",
 		"LicenseVersion": "2.0",
@@ -264,6 +277,15 @@
 		"SpdxCode": "GPL-3.0-or-later",
 		"LicenseVersion": "3.0+",
 		"DefaultUrl": "https://spdx.org/licenses/GPL-3.0-or-later.html",
+		"StartLicenseText": "",
+		"EndLicenseText": "",
+		"Identifiers": [
+		]
+	},
+	"RPL-1.5": {
+		"SpdxCode": "RPL-1.5",
+		"LicenseVersion": "1.5",
+		"DefaultUrl": "https://spdx.org/licenses/RPL-1.5.html",
 		"StartLicenseText": "",
 		"EndLicenseText": "",
 		"Identifiers": [

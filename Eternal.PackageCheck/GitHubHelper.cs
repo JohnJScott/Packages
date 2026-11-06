@@ -1,8 +1,7 @@
-// Copyright Eternal Developments, LLC. All Rights Reserved.
+﻿// Copyright Eternal Developments, LLC. All Rights Reserved.
 
 using Eternal.ConsoleUtilities;
 using System.Net.Http.Headers;
-using System.Text.Json;
 
 namespace Eternal.PackageCheck
 {
@@ -81,24 +80,15 @@ namespace Eternal.PackageCheck
 		/// <returns>The detected license file and its SPDX details, or null if none was found or the request failed.</returns>
 		public static async Task<GitHubLicense?> GetRepositoryLicenseData( string owner, string repo )
 		{
-			GitHubLicense? license_data;
-			try
+			// A repository with no detectable license answers 404, which is an ordinary outcome rather than a failure, so it is handled as an empty body
+			string request_url = $"https://api.github.com/repos/{owner}/{repo}/license";
+			string json = await PackageCheck.Request( HttpClientInstance, request_url );
+			if( json.Length == 0 )
 			{
-				string request_url = $"https://api.github.com/repos/{owner}/{repo}/license";
-
-				HttpResponseMessage response = await HttpClientInstance.GetAsync( request_url );
-				response.EnsureSuccessStatusCode();
-
-				string json = await response.Content.ReadAsStringAsync();
-				license_data = JsonSerializer.Deserialize<GitHubLicense>( json );
-			}
-			catch( HttpRequestException ex )
-			{
-				ConsoleLogger.Error( $"GitHub query failed with message '{ex.Message}'" );
-				license_data = null;
+				return null;
 			}
 
-			return license_data;
+			return JsonHelper.ReadJson<GitHubLicense>( json );
 		}
 
 		/// <summary>
@@ -110,24 +100,14 @@ namespace Eternal.PackageCheck
 		/// <returns>The files and directories at the repository root, or null if the request failed.</returns>
 		public static async Task<List<GitHubFile>?> GetRepositoryFilesAsync( string owner, string repo )
 		{
-			List<GitHubFile>? files;
-			try
+			string request_url = $"https://api.github.com/repos/{owner}/{repo}/contents/";
+			string json = await PackageCheck.Request( HttpClientInstance, request_url );
+			if( json.Length == 0 )
 			{
-				string request_url = $"https://api.github.com/repos/{owner}/{repo}/contents/";
-
-				HttpResponseMessage response = await HttpClientInstance.GetAsync( request_url );
-				response.EnsureSuccessStatusCode();
-
-				string json = await response.Content.ReadAsStringAsync();
-				files = JsonSerializer.Deserialize<List<GitHubFile>>( json );
-			}
-			catch( HttpRequestException ex )
-			{
-				ConsoleLogger.Error( $"GitHub query failed with message '{ex.Message}'" );
-				files = null;
+				return null;
 			}
 
-			return files;
+			return JsonHelper.ReadJson<List<GitHubFile>>( json );
 		}
 	}
 }

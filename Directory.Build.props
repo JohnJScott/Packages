@@ -1,8 +1,10 @@
 <Project>
  <PropertyGroup>
+   <SolutionDir Condition="'$(SolutionDir)' == ''">$(MSBuildThisFileDirectory)</SolutionDir>
+   <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
    <Deterministic>true</Deterministic>
    <BaseOutputPath>$(SolutionDir)\Binaries\$(Platform)\</BaseOutputPath>
-   <BaseIntermediateOutputPath>$(SolutionDir)\Intermediate\$(Platform)\</BaseIntermediateOutputPath> 
+   <BaseIntermediateOutputPath>$(SolutionDir)Intermediate\$(Platform)\$(MSBuildProjectName)\</BaseIntermediateOutputPath> 
    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath> 
    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>  
   </PropertyGroup>

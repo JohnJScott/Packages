@@ -1,8 +1,7 @@
-// Copyright Eternal Developments, LLC. All Rights Reserved.
+﻿// Copyright Eternal Developments, LLC. All Rights Reserved.
 
 using Eternal.ConsoleUtilities;
 using System.Net.Http.Headers;
-using System.Text.Json;
 
 namespace Eternal.PackageCheck
 {
@@ -73,24 +72,14 @@ namespace Eternal.PackageCheck
 		/// <returns>The detected license details, or null if none was found or the request failed.</returns>
 		public static async Task<GitLabLicense?> GetRepositoryLicenseData( string owner, string repo )
 		{
-			GitLabLicense? license_data;
 			string request_url = $"https://gitlab.com/api/v4/projects/{Uri.EscapeDataString( $"{owner}/{repo}" )}?license=true";
-
-			try
+			string json = await PackageCheck.Request( HttpClientInstance, request_url );
+			if( json.Length == 0 )
 			{
-				HttpResponseMessage response = await HttpClientInstance.GetAsync( request_url );
-				response.EnsureSuccessStatusCode();
-
-				string json = await response.Content.ReadAsStringAsync();
-				license_data = JsonSerializer.Deserialize<GitLabLicense>( json );
-			}
-			catch( Exception ex )
-			{
-				ConsoleLogger.Error( $"GitLab query failed with message '{ex.Message}'" );
-				license_data = null;
+				return null;
 			}
 
-			return license_data;
+			return JsonHelper.ReadJson<GitLabLicense>( json );
 		}
 
 		/// <summary>
@@ -108,50 +97,43 @@ namespace Eternal.PackageCheck
 			List<GitLabFile> files = new List<GitLabFile>();
 			int page = 1;
 
-			try
+			while( true )
 			{
-				while( true )
+				string request_url = $"{tree_url}?per_page=100&page={page}";
+
+				using HttpResponseMessage? response = await PackageCheck.RequestResponse( HttpClientInstance, request_url );
+				if( response == null )
 				{
-					string request_url = $"{tree_url}?per_page=100&$page={page}";
-
-					HttpResponseMessage response = await HttpClientInstance.GetAsync( request_url );
-					response.EnsureSuccessStatusCode();
-
-					string json = await response.Content.ReadAsStringAsync();
-					List<GitLabFile>? page_files = JsonSerializer.Deserialize<List<GitLabFile>>( json );
-					if( page_files == null || page_files.Count == 0 )
-					{
-						break;
-					}
-
-					foreach( GitLabFile file in page_files )
-					{
-						// Only files ("blob") have downloadable content; directories ("tree") are left without a download_url, matching GitHub's
-						// contents API returning download_url: null for directories.
-						if( file.type == "blob" )
-						{
-							string encoded_file_path = Uri.EscapeDataString( file.path );
-							file.url = tree_url.Replace( "/repository/tree", $"/repository/files/{encoded_file_path}" );
-							file.download_url = $"{file.url}/raw";
-						}
-
-						files.Add( file );
-					}
-
-					// GitLab returns an empty "X-Next-Page" header once the last page is reached.
-					string next_page = response.Headers.TryGetValues( "X-Next-Page", out IEnumerable<string>? values ) ? values.FirstOrDefault() ?? string.Empty : string.Empty;
-					if( string.IsNullOrEmpty( next_page ) )
-					{
-						break;
-					}
-
-					page = int.Parse( next_page );
+					break;
 				}
-			}
-			catch( HttpRequestException ex )
-			{
-				ConsoleLogger.Error( $"GitLab query failed with message '{ex.Message}'" );
-				files = new List<GitLabFile>();
+
+				string json = await response.Content.ReadAsStringAsync();
+				List<GitLabFile>? page_files = JsonHelper.ReadJson<List<GitLabFile>>( json );
+				if( page_files == null || page_files.Count == 0 )
+				{
+					break;
+				}
+
+				foreach( GitLabFile file in page_files )
+				{
+					// Only files ("blob") have downloadable content; directories ("tree") are left without a download_url, matching GitHub's
+					// contents API returning download_url: null for directories.
+					if( file.type == "blob" )
+					{
+						string encoded_file_path = Uri.EscapeDataString( file.path );
+						file.url = tree_url.Replace( "/repository/tree", $"/repository/files/{encoded_file_path}" );
+						file.download_url = $"{file.url}/raw";
+					}
+
+					files.Add( file );
+				}
+
+				// GitLab returns an empty "X-Next-Page" header once the last page is reached.
+				string next_page = response.Headers.TryGetValues( "X-Next-Page", out IEnumerable<string>? values ) ? values.FirstOrDefault() ?? string.Empty : string.Empty;
+				if( !int.TryParse( next_page, out page ) )
+				{
+					break;
+				}
 			}
 
 			return files;

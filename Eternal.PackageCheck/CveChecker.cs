@@ -38,25 +38,42 @@ namespace Eternal.PackageCheck
 		public string id { get; set; } = string.Empty;
 
 		public List<string>? aliases { get; set; }
-		
+
+		/// <summary>
+		/// The vulnerabilities this one was derived from. A Debian advisory (a DSA or DLA) covers several CVEs at once and lists them here rather than as aliases,
+		/// as it is a distinct advisory rather than another name for any one of them.
+		/// </summary>
+		public List<string>? upstream { get; set; }
+
 		public List<OsvReference>? references { get; set; }
 
 		/// <summary>
-		/// Finds this vulnerability's CVE identifier, first checking <see cref="aliases"/> for an entry starting with "CVE-", then falling back to scanning
-		/// <see cref="references"/> for a URL containing one.
+		/// Finds this vulnerability's CVE identifiers, first checking <see cref="aliases"/> and <see cref="upstream"/> for entries starting with "CVE-", then
+		/// falling back to scanning <see cref="references"/> for a URL containing one.
 		/// </summary>
-		/// <returns>The CVE id (e.g. "CVE-2021-12345"), or null if none could be found.</returns>
-		public string? FindCveId()
+		/// <returns>The distinct CVE ids (e.g. "CVE-2021-12345"), or an empty list if none could be found.</returns>
+		public List<string> FindCveIds()
 		{
-			if( aliases != null )
+			List<string> cve_ids = new List<string>();
+			foreach( List<string>? identifiers in new List<string>?[] { aliases, upstream } )
 			{
-				foreach( string alias in aliases )
+				if( identifiers == null )
 				{
-					if( alias.StartsWith( "CVE-" ) )
+					continue;
+				}
+
+				foreach( string identifier in identifiers )
+				{
+					if( identifier.StartsWith( "CVE-" ) && !cve_ids.Contains( identifier ) )
 					{
-						return alias;
+						cve_ids.Add( identifier );
 					}
 				}
+			}
+
+			if( cve_ids.Count > 0 )
+			{
+				return cve_ids;
 			}
 
 			if( references != null )
@@ -66,12 +83,13 @@ namespace Eternal.PackageCheck
 					int offset = reference.url.IndexOf( "CVE-", StringComparison.OrdinalIgnoreCase );
 					if( offset > -1 )
 					{
-						return reference.url.Substring( offset );
+						cve_ids.Add( reference.url.Substring( offset ) );
+						break;
 					}
 				}
 			}
 
-			return null;
+			return cve_ids;
 		}
 	}
 
@@ -181,7 +199,20 @@ namespace Eternal.PackageCheck
 		/// <param name="package">The package data ecosystem.</param>
 		internal static void CheckCves( GenericPackage package, string ecosystem )
 		{
-			OsvQueryRequest request = new OsvQueryRequest( package.Version, package.Name, ecosystem );
+			CheckCves( package, ecosystem, package.Name, package.Version );
+		}
+
+		/// <summary>
+		/// Queries OSV.dev for known vulnerabilities affecting a package under a different name and version than it is published as - a Debian binary package,
+		/// whose advisories are recorded against the source package that built it - and records them against the given package.
+		/// </summary>
+		/// <param name="package">The package to record the vulnerabilities against.</param>
+		/// <param name="ecosystem">The case-sensitive ecosystem from https://ossf.github.io/osv-schema/#defined-ecosystems</param>
+		/// <param name="packageName">The name OSV knows the package by.</param>
+		/// <param name="version">The version OSV knows the package by.</param>
+		internal static void CheckCves( GenericPackage package, string ecosystem, string packageName, string version )
+		{
+			OsvQueryRequest request = new OsvQueryRequest( version, packageName, ecosystem );
 			string json_payload = JsonHelper.WriteJson( request );
 			string osv_content = PackageCheck.PostRequest( "https://api.osv.dev/v1/query", json_payload ).Result;
 			if( string.IsNullOrEmpty( osv_content ) )
@@ -203,43 +234,69 @@ namespace Eternal.PackageCheck
 			}
 
 			ConsoleLogger.Log( $" .. found {osv_response.vulns.Count} vulnerabilitie(s)" );
+
+			// The same CVE can be reached through several advisories - Debian publishes both a DSA covering a batch of CVEs and a DEBIAN-CVE record for each one -
+			// so each is only looked up and recorded once
+			List<string> cve_ids = new List<string>();
 			foreach( OsvVulnerability vulnerability in osv_response.vulns )
 			{
-				string? cve_id = vulnerability.FindCveId();
-				if( cve_id == null )
+				List<string> vulnerability_cve_ids = vulnerability.FindCveIds();
+				if( vulnerability_cve_ids.Count == 0 )
 				{
 					ConsoleLogger.Warning( $"Failed to find CVE id for vulnerability '{vulnerability.id}'" );
 					continue;
 				}
 
-				string nvd_url = $"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={Uri.EscapeDataString( cve_id )}";
-				string nvd_content = PackageCheck.Request( nvd_url ).Result;
-				if( string.IsNullOrEmpty( nvd_content ) )
+				foreach( string cve_id in vulnerability_cve_ids )
 				{
-					ConsoleLogger.Warning( $"Failed to get CVE details from NVD for '{cve_id}'" );
-					continue;
-				}
-
-				NvdCveResponse? nvd_response = JsonHelper.ReadJson<NvdCveResponse>( nvd_content );
-				if( nvd_response == null || nvd_response.vulnerabilities == null )
-				{
-					ConsoleLogger.Error( $"Failed to deserialize response to '{nvd_url}'" );
-					continue;
-				}
-
-				if( nvd_response.vulnerabilities.Count > 0 )
-				{
-					NvdCve? cve = nvd_response.vulnerabilities[0].cve;
-					if( cve != null )
+					if( !cve_ids.Contains( cve_id ) )
 					{
-						GenericCve generic_cve = new GenericCve()
-						{
-							CveId = cve_id,
-							Severity = cve.GetSeverity()
-						};
-
-						package.CVEs.Add( generic_cve );
+						cve_ids.Add( cve_id );
 					}
+				}
+			}
+
+			foreach( string cve_id in cve_ids )
+			{
+				AddCve( package, cve_id );
+			}
+		}
+
+		/// <summary>
+		/// Fetches the severity of a CVE from the NVD and records it against the package. Nothing is recorded if the NVD could not be reached or does not know
+		/// the CVE.
+		/// </summary>
+		/// <param name="package">The package to record the CVE against.</param>
+		/// <param name="cveId">The CVE id, e.g. "CVE-2021-12345".</param>
+		private static void AddCve( GenericPackage package, string cveId )
+		{
+			string nvd_url = $"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={Uri.EscapeDataString( cveId )}";
+			string nvd_content = PackageCheck.Request( nvd_url ).Result;
+			if( string.IsNullOrEmpty( nvd_content ) )
+			{
+				ConsoleLogger.Warning( $"Failed to get CVE details from NVD for '{cveId}'" );
+				return;
+			}
+
+			NvdCveResponse? nvd_response = JsonHelper.ReadJson<NvdCveResponse>( nvd_content );
+			if( nvd_response == null || nvd_response.vulnerabilities == null )
+			{
+				ConsoleLogger.Error( $"Failed to deserialize response to '{nvd_url}'" );
+				return;
+			}
+
+			if( nvd_response.vulnerabilities.Count > 0 )
+			{
+				NvdCve? cve = nvd_response.vulnerabilities[0].cve;
+				if( cve != null )
+				{
+					GenericCve generic_cve = new GenericCve()
+					{
+						CveId = cveId,
+						Severity = cve.GetSeverity()
+					};
+
+					package.CVEs.Add( generic_cve );
 				}
 			}
 		}

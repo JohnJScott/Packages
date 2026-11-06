@@ -1,4 +1,4 @@
-// Copyright Eternal Developments, LLC. All Rights Reserved.
+﻿// Copyright Eternal Developments, LLC. All Rights Reserved.
 
 using Eternal.ConsoleUtilities;
 using System.Text;
@@ -61,18 +61,36 @@ namespace Eternal.PackageCheck
 	}
 
 	/// <summary>
-	/// The PyPI JSON API response. "urls" holds the files of the resolved version only; the "releases" and "vulnerabilities" members are ignored, the latter
-	/// because CVEs are looked up from OSV by <see cref="CveChecker"/>.
+	/// The PyPI JSON API response. "urls" holds the files of the resolved version only; the "vulnerabilities" member is ignored because CVEs are looked up
+	/// from OSV by <see cref="CveChecker"/>.
 	/// </summary>
 	internal class PythonPackageRaw
 	{
 		public PythonPackageInfoRaw info = new PythonPackageInfoRaw();
 		public List<PythonPackageFileRaw>? urls = new List<PythonPackageFileRaw>();
+
+		/// <summary>
+		/// Every version the project has ever published, mapped to its files. Only the keys are read, to resolve a version specifier; the files of the
+		/// resolved version arrive in <see cref="urls"/> instead. PyPI only returns this from the project URL, not from a version specific one.
+		/// </summary>
+		public Dictionary<string, List<PythonPackageFileRaw>>? releases = new Dictionary<string, List<PythonPackageFileRaw>>();
 	}
 
 	internal class PythonPackage
 		: GenericPackage
 	{
+		/// <summary>
+		/// The canonical name of this package type. Lower cased it is the command line verb, and upper cased it is the deps.dev system name, so neither is stored
+		/// separately. It is also the display name and the ecosystem component of the .tps file name.
+		/// </summary>
+		internal const string PackageType = "PyPI";
+
+		/// <summary>The ecosystem name used by OSV, from https://ossf.github.io/osv-schema/#defined-ecosystems. OSV rejects anything else with an HTTP 400.</summary>
+		internal const string OSVEcosystem = "PyPI";
+
+		/// <summary>The path segment used by security.snyk.io, which calls PyPI "pip" - "pypi" returns a 404.</summary>
+		internal const string SnykEcosystem = "pip";
+
 		/// <summary>
 		/// Maps the trove license classifiers to their SPDX code, for packages that predate PEP 639's "License-Expression" field. Several classifiers name a
 		/// license family rather than a specific license ("BSD License", "Apache Software License"); those are mapped to the overwhelmingly common member of
@@ -166,7 +184,7 @@ namespace Eternal.PackageCheck
 
 			ScrapeCopyrightFromInlineLicense();
 
-			base.CleanupData( "PyPI" );
+			base.CleanupData( PackageType, OSVEcosystem, SnykEcosystem );
 		}
 
 		/// <summary>
@@ -309,41 +327,6 @@ namespace Eternal.PackageCheck
 		}
 
 		/// <summary>
-		/// Splits a PEP 639 SPDX license expression into its individual license codes, discarding the operators. "AND" and "OR" are dropped, and the id following
-		/// a "WITH" is dropped too because it names an SPDX exception rather than a license.
-		/// </summary>
-		/// <param name="licenseExpression">The expression, e.g. "Apache-2.0 OR BSD-3-Clause" or "GPL-2.0-only WITH Classpath-exception-2.0".</param>
-		/// <returns>The distinct SPDX license codes found in the expression.</returns>
-		private static List<string> ParseLicenseExpression( string licenseExpression )
-		{
-			List<string> spdx_codes = new List<string>();
-
-			string[] tokens = licenseExpression.Split( [' ', '\t', '(', ')'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries );
-			for( int token_index = 0; token_index < tokens.Length; token_index++ )
-			{
-				string token = tokens[token_index];
-				if( string.Equals( token, "AND", StringComparison.OrdinalIgnoreCase ) || string.Equals( token, "OR", StringComparison.OrdinalIgnoreCase ) )
-				{
-					continue;
-				}
-
-				if( string.Equals( token, "WITH", StringComparison.OrdinalIgnoreCase ) )
-				{
-					// Skip the exception id that always follows a WITH.
-					token_index++;
-					continue;
-				}
-
-				if( !spdx_codes.Contains( token, StringComparer.OrdinalIgnoreCase ) )
-				{
-					spdx_codes.Add( token );
-				}
-			}
-
-			return spdx_codes;
-		}
-
-		/// <summary>
 		/// Determines whether the legacy "License" metadata field holds a license name rather than the whole license text inlined into it, which is what projects
 		/// declaring license = { file = "LICENSE" } end up publishing.
 		/// </summary>
@@ -374,7 +357,7 @@ namespace Eternal.PackageCheck
 		/// <param name="licenseExpression">The expression to parse.</param>
 		private void AddLicensesFromExpression( string licenseExpression )
 		{
-			foreach( string spdx_code in ParseLicenseExpression( licenseExpression ) )
+			foreach( string spdx_code in LicenseChecker.ParseLicenseExpression( licenseExpression ) )
 			{
 				AddLicense( new LicenseInfo( spdx_code ) );
 			}
@@ -589,24 +572,41 @@ namespace Eternal.PackageCheck
 		}
 
 		/// <summary>
-		/// Looks up a Python package's metadata from the PyPI JSON API: resolves the requested version (or the latest release if <paramref name="version"/> is empty),
-		/// and reads its author, licenses, homepage, source repository, download URL, and dependencies.
+		/// Picks the version of a package to use from its published versions.
 		/// </summary>
-		/// <param name="packageName">The PyPI project name, e.g. "requests". Does not need to be PEP 503 normalized; PyPI resolves case and '-'/'_'/'.' differences itself.</param>
-		/// <param name="version">The specific version to fetch, or "" to use the latest release. PyPI only serves a pre-release as the latest if the project has published nothing else.</param>
-		/// <returns>The populated package, or null if the package or the requested version could not be retrieved.</returns>
-		internal static PythonPackage? GetPythonPackage( string packageName, string version, bool isRootPackage )
+		/// <param name="packageName">The PyPI project name, used for logging.</param>
+		/// <param name="versions">The published versions of the package.</param>
+		/// <param name="requirements">A published version number, or a PEP 440 specifier such as "&gt;=1.21.0,&lt;2.0". Never blank, as PyPI resolves that itself.</param>
+		/// <returns>The version number to use, or null if no version could be found.</returns>
+		private static string? SelectVersion( string packageName, List<string> versions, string requirements )
 		{
-			string get_request;
-			if( string.IsNullOrEmpty( version ) )
+			// A published version number is used as is, which also allows a pre-release to be requested by name
+			string? exact_version = versions.Find( x => x == requirements );
+			if( exact_version != null )
 			{
-				get_request = $"https://pypi.org/pypi/{Uri.EscapeDataString( packageName )}/json";
-			}
-			else
-			{
-				get_request = $"https://pypi.org/pypi/{Uri.EscapeDataString( packageName )}/{Uri.EscapeDataString( version )}/json";
+				return exact_version;
 			}
 
+			PythonVersion? matching_version = PythonVersionMatcher.SelectMatchingVersion( packageName, versions, requirements );
+			return matching_version?.ToString();
+		}
+
+		/// <summary>
+		/// Looks up a Python package's metadata from the PyPI JSON API: resolves the version to use from <paramref name="requirements"/>, and reads its
+		/// author, licenses, homepage, source repository, download URL, and dependencies.
+		/// </summary>
+		/// <param name="packageName">The PyPI project name, e.g. "requests". Does not need to be PEP 503 normalized; PyPI resolves case and '-'/'_'/'.' differences itself.</param>
+		/// <param name="requirements">
+		/// Blank to use the latest release, which PyPI resolves itself and only serves as a pre-release if the project has published nothing else; a specific
+		/// version number such as "2.32.3" (a pre-release can be requested this way); or a PEP 440 specifier such as "&gt;=1.21.0,&lt;2.0" or "~=1.4.2",
+		/// which selects the highest final version that satisfies it.
+		/// </param>
+		/// <param name="isRootPackage">True if this is the package being checked, rather than one of its dependencies, so its dependencies are collected.</param>
+		/// <returns>The populated package, or null if the package, a version satisfying the requirements, or that version's metadata could not be retrieved.</returns>
+		internal static PythonPackage? GetPythonPackage( string packageName, string requirements, bool isRootPackage )
+		{
+			// The project URL serves the latest release along with the list of every published version, which is what a specifier has to be resolved against.
+			string get_request = $"https://pypi.org/pypi/{Uri.EscapeDataString( packageName )}/json";
 			string content = PackageCheck.Request( get_request ).Result;
 			if( string.IsNullOrEmpty( content ) )
 			{
@@ -619,6 +619,35 @@ namespace Eternal.PackageCheck
 			{
 				ConsoleLogger.Error( $"Failed to deserialize data for the '{packageName}' package from PyPI.org" );
 				return null;
+			}
+
+			string trimmed_requirements = requirements.Trim();
+			if( trimmed_requirements.Length > 0 )
+			{
+				string? requested_version = SelectVersion( packageName, raw_package.releases?.Keys.ToList() ?? [], trimmed_requirements );
+				if( requested_version == null )
+				{
+					return null;
+				}
+
+				// Only ask for the version's own metadata when it is not the latest release already in hand.
+				if( requested_version != raw_package.info.version )
+				{
+					get_request = $"https://pypi.org/pypi/{Uri.EscapeDataString( packageName )}/{Uri.EscapeDataString( requested_version )}/json";
+					content = PackageCheck.Request( get_request ).Result;
+					if( string.IsNullOrEmpty( content ) )
+					{
+						ConsoleLogger.Error( $"Failed to retrieve version '{requested_version}' of the '{packageName}' package from PyPI.org" );
+						return null;
+					}
+
+					raw_package = JsonHelper.ReadJson<PythonPackageRaw>( content );
+					if( raw_package == null )
+					{
+						ConsoleLogger.Error( $"Failed to deserialize data for the '{packageName}' package from PyPI.org" );
+						return null;
+					}
+				}
 			}
 
 			PythonPackageInfoRaw info = raw_package.info;
@@ -671,15 +700,12 @@ namespace Eternal.PackageCheck
 
 		protected override void UpdateDependency( PackageDependency dependency )
 		{
-			PythonPackage? python_package = GetPythonPackage( dependency.Name, "", false );
-			if( python_package == null )
+			PythonPackage? python_package = GetPythonPackage( dependency.Name, dependency.Version, false );
+			if( python_package != null )
 			{
-				return;
+				python_package.CleanupDependencyData();
+				python_package.SetDependencyLicense( dependency );
 			}
-
-			python_package.CleanupDependencyData( "PyPI" );
-
-			base.UpdateDependency( dependency );
 		}
 
 		/// <summary>
@@ -687,18 +713,15 @@ namespace Eternal.PackageCheck
 		/// package or the requested version could not be found.
 		/// </summary>
 		/// <param name="packageName">The PyPI project name, e.g. "requests".</param>
-		/// <param name="version">The specific version to check, or "" to use the latest release.</param>
+		/// <param name="version">The specific version to check, a PEP 440 specifier such as "&gt;=1.21.0,&lt;2.0", or "" to use the latest release.</param>
 		public static void CheckPythonPackage( string packageName, string version )
 		{
 			PythonPackage? python_package = GetPythonPackage( packageName, version, true );
-			if( python_package == null )
+			if( python_package != null )
 			{
-				return;
+				python_package.CleanupData();
+				python_package.PrintDetails( PackageType );
 			}
-
-			python_package.CleanupData();
-
-			python_package.PrintDetails( "PyPI" );
 		}
 	}
 }

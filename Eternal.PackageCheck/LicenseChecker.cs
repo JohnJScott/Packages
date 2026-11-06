@@ -2,6 +2,7 @@
 
 using Eternal.ConsoleUtilities;
 using System.IO.Compression;
+using System.Text.RegularExpressions;
 
 namespace Eternal.PackageCheck
 {
@@ -25,7 +26,8 @@ namespace Eternal.PackageCheck
 			"license",
 			"licence",
 			"copying",
-			"copyright"
+			"copyright",
+			"bsdl"
 		];
 
 		private static bool IsPotentialLicenseFile( string fileName )
@@ -101,8 +103,11 @@ namespace Eternal.PackageCheck
 					}
 
 					string[] repo_segments = repo_path.Split( "/", StringSplitOptions.RemoveEmptyEntries );
-					result.owner = repo_segments[0];
-					result.repo = repo_segments[1];
+					if( repo_segments.Length > 1 )
+					{
+						result.owner = repo_segments[0];
+						result.repo = repo_segments[1];
+					}
 				}
 			}
 			else
@@ -125,12 +130,126 @@ namespace Eternal.PackageCheck
 				{
 					string repo_path = sourceCodeUri[( index + 5 )..];
 					string[] repo_segments = repo_path.Split( "/", StringSplitOptions.RemoveEmptyEntries );
-					result.owner = repo_segments[0];
-					result.repo = repo_segments[1];
+					if( repo_segments.Length > 1 )
+					{
+						result.owner = repo_segments[0];
+						result.repo = repo_segments[1];
+					}
 				}
 			}
 
 			return result;
+		}
+
+		/// <summary>
+		/// Splits an SPDX license expression into its individual license codes, discarding the operators. "AND" and "OR" are dropped, and the id following a "WITH"
+		/// is dropped too because it names an SPDX exception rather than a license.
+		/// </summary>
+		/// <param name="licenseExpression">The expression, e.g. "Apache-2.0 OR BSD-3-Clause" or "GPL-2.0-only WITH Classpath-exception-2.0".</param>
+		/// <returns>The distinct SPDX license codes found in the expression.</returns>
+		internal static List<string> ParseLicenseExpression( string licenseExpression )
+		{
+			List<string> spdx_codes = new List<string>();
+
+			string[] tokens = licenseExpression.Split( [' ', '\t', '(', ')'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries );
+			for( int token_index = 0; token_index < tokens.Length; token_index++ )
+			{
+				string token = tokens[token_index];
+				if( string.Equals( token, "AND", StringComparison.OrdinalIgnoreCase ) || string.Equals( token, "OR", StringComparison.OrdinalIgnoreCase ) )
+				{
+					continue;
+				}
+
+				if( string.Equals( token, "WITH", StringComparison.OrdinalIgnoreCase ) )
+				{
+					// Skip the exception id that always follows a WITH.
+					token_index++;
+					continue;
+				}
+
+				if( !spdx_codes.Contains( token, StringComparer.OrdinalIgnoreCase ) )
+				{
+					spdx_codes.Add( token );
+				}
+			}
+
+			return spdx_codes;
+		}
+
+		/// <summary>
+		/// Matches a GNU license name that is not a current SPDX code, capturing the family, the version, and any "or later" plus: a Debian short name such as "GPL-2",
+		/// "LGPL-2.1+", or "GFDL-1.3+", or a deprecated SPDX code such as "GPL-2.0" or "GPL-2.0+".
+		/// </summary>
+		private static readonly Regex GnuLicenseName = new Regex( @"^(A?GPL|LGPL|GFDL)-(\d+(?:\.\d+)?)(\+)?$", RegexOptions.IgnoreCase | RegexOptions.Compiled );
+
+		/// <summary>
+		/// Converts any misnamed licenses to the appropriate SPDX code. Debian copyright files name licenses with their own short names, which mostly but not
+		/// entirely agree with SPDX - see https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/#license-short-name - so those that differ are converted
+		/// here too.
+		/// </summary>
+		/// <param name="licenses">The licenses to fix, updated in place.</param>
+		public static void FixSpdxCodes( List<LicenseInfo> licenses )
+		{
+			foreach( LicenseInfo license_info in licenses )
+			{
+				switch( license_info.SpdxCode )
+				{
+					case "Apache 2":
+					case "Apache-2":
+						license_info.SpdxCode = "Apache-2.0";
+						break;
+
+					case "Ruby":
+						license_info.SpdxCode = "BSD-2-Clause";
+						break;
+
+					case "Expat":
+						license_info.SpdxCode = "MIT";
+						break;
+
+					case "BSD-2-clause":
+						license_info.SpdxCode = "BSD-2-Clause";
+						break;
+
+					case "BSD-3-clause":
+						license_info.SpdxCode = "BSD-3-Clause";
+						break;
+
+					case "BSD-4-clause":
+						license_info.SpdxCode = "BSD-4-Clause";
+						break;
+
+					case "Artistic":
+						license_info.SpdxCode = "Artistic-1.0";
+						break;
+
+					case "CC0":
+						license_info.SpdxCode = "CC0-1.0";
+						break;
+
+					case "PSF-2":
+						license_info.SpdxCode = "PSF-2.0";
+						break;
+
+					default:
+						Match match = GnuLicenseName.Match( license_info.SpdxCode );
+						if( match.Success )
+						{
+							// SPDX always spells out the minor version, and makes the "only" explicit
+							string family = match.Groups[1].Value.ToUpperInvariant();
+							string version = match.Groups[2].Value;
+							if( !version.Contains( '.' ) )
+							{
+								version += ".0";
+							}
+
+							string suffix = match.Groups[3].Success ? "or-later" : "only";
+							license_info.SpdxCode = $"{family}-{version}-{suffix}";
+						}
+
+						break;
+				}
+			}
 		}
 
 		/// <summary>
@@ -212,11 +331,8 @@ namespace Eternal.PackageCheck
 						ConsoleLogger.Log( $" .. found license file with matching SPDX code from GitHub API -> using '{license_data.html_url}'" );
 						license_info.HtmlLicenseUri = license_data.html_url;
 						license_info.LicenseContent = PackageCheck.Request( license_data.download_url ).Result;
-						return;
 					}
 				}
-
-				ConsoleLogger.Warning( $"Failed to find license matching SPDX code '{license_data.license?.spdx_id}'" );
 			}
 
 			// Iterate over files
@@ -228,20 +344,20 @@ namespace Eternal.PackageCheck
 
 			foreach( GitHubFile github_file in github_files )
 			{
-				if( IsPotentialLicenseFile( github_file.name ) )
+				if( !string.IsNullOrEmpty( github_file.download_url ) )
 				{
-					ConsoleLogger.Log( $" .... found potential license file '{github_file.name}'" );
-					string license_file_content = PackageCheck.Request( github_file.download_url ).Result;
-					if( string.IsNullOrEmpty( license_file_content ) )
+					if( IsPotentialLicenseFile( github_file.name ) )
 					{
-						ConsoleLogger.Warning( $"Failed to download '{github_file.download_url}'" );
-						continue;
-					}
+						ConsoleLogger.Log( $" .... found potential license file '{github_file.name}'" );
+						string license_file_content = PackageCheck.Request( github_file.download_url ).Result;
+						if( string.IsNullOrEmpty( license_file_content ) )
+						{
+							ConsoleLogger.Warning( $"Failed to download '{github_file.download_url}'" );
+							continue;
+						}
 
-					string html_url = GitHubHelper.ConvertFromDownloadUrl( github_file.download_url, owner, repo );
-					if( LicenseIdentifier.IdentifyLicense( licenses, html_url, license_file_content ) )
-					{
-						break;
+						string html_url = GitHubHelper.ConvertFromDownloadUrl( github_file.download_url, owner, repo );
+						LicenseIdentifier.IdentifyLicense( licenses, html_url, license_file_content );
 					}
 				}
 			}
@@ -276,11 +392,8 @@ namespace Eternal.PackageCheck
 						ConsoleLogger.Log( $"Found license file with matching SPDX code from GitLab API -> using '{license_data.license_url}'" );
 						license_info.HtmlLicenseUri = license_data.license_url;
 						license_info.LicenseContent = PackageCheck.Request( GitLabHelper.ConvertFromHtmlUrl( license_data.license_url ) ).Result;
-						return;
 					}
 				}
-			
-				ConsoleLogger.Warning( $"Failed to find license matching SPDX code '{license_data.license?.key}'" );
 			}
 
 			// Iterate over files
@@ -288,21 +401,21 @@ namespace Eternal.PackageCheck
 			List<GitLabFile> gitlab_files = GitLabHelper.GetRepositoryFilesAsync( owner, repo ).Result;
 			foreach( GitLabFile gitlab_file in gitlab_files )
 			{
-				if( IsPotentialLicenseFile( gitlab_file.name ) )
+				if( !string.IsNullOrEmpty( gitlab_file.download_url ) )
 				{
-					ConsoleLogger.Log( $" .... found potential license file '{gitlab_file.name}'" );
-					string license_file_content = PackageCheck.Request( gitlab_file.download_url ).Result;
-					if( string.IsNullOrEmpty( license_file_content ) )
+					if( IsPotentialLicenseFile( gitlab_file.name ) )
 					{
-						ConsoleLogger.Warning( $"Failed to download '{gitlab_file.download_url}'" );
-						continue;
-					}
+						ConsoleLogger.Log( $" .... found potential license file '{gitlab_file.name}'" );
+						string license_file_content = PackageCheck.Request( gitlab_file.download_url ).Result;
+						if( string.IsNullOrEmpty( license_file_content ) )
+						{
+							ConsoleLogger.Warning( $"Failed to download '{gitlab_file.download_url}'" );
+							continue;
+						}
 
-					// FIXME
-					string html_url = gitlab_file.download_url;
-					if( LicenseIdentifier.IdentifyLicense( licenses, html_url, license_file_content ) )
-					{
-						break;
+						// FIXME
+						string html_url = gitlab_file.download_url;
+						LicenseIdentifier.IdentifyLicense( licenses, html_url, license_file_content );
 					}
 				}
 			}
@@ -328,10 +441,7 @@ namespace Eternal.PackageCheck
 					string license_file_content = reader.ReadToEnd();
 
 					string html_url = GoogleSourceHelper.ConvertToSourceLink( sourceCodeUri, entry.FullName );
-					if( LicenseIdentifier.IdentifyLicense( licenses, html_url, license_file_content ) )
-					{
-						break;
-					}
+					LicenseIdentifier.IdentifyLicense( licenses, html_url, license_file_content );
 				}
 			}
 		}
